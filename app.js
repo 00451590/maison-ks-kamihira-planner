@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import * as Y from "yjs";
-import { WebrtcProvider } from "y-webrtc";
+import { WebsocketProvider } from "y-websocket";
 
 const CATALOG = [
   { id: "sofa120", name: "ソファベッド120", w: 120, d: 78, h: 75, color: "#7d8f72", note: "脚付き・2人同居向き" },
@@ -531,8 +531,17 @@ function setSync(status, text) {
   els.syncStatus.textContent = text;
 }
 
+function updatePeerStatus() {
+  if (!provider) return;
+  const n = provider.awareness?.getStates()?.size || 1;
+  if (provider.wsconnected) {
+    setSync("online", n > 1 ? `同期中 · ${n}人` : "同期OK · 相手の接続待ち");
+  }
+}
+
 function joinRoom(room) {
   const name = (room || DEFAULT_ROOM).trim().toLowerCase().replace(/[^a-z0-9\-]/g, "").slice(0, 32) || DEFAULT_ROOM;
+  const roomId = `maison-ks-kamihira-${name}`;
 
   try {
     if (provider) {
@@ -547,19 +556,19 @@ function joinRoom(room) {
     setSync("connecting", "同期接続中…");
     ydoc = new Y.Doc();
     ymap = ydoc.getMap("shared");
-    provider = new WebrtcProvider(`maison-ks-kamihira-${name}`, ydoc, {
-      signaling: ["wss://signaling.yjs.dev"],
+    provider = new WebsocketProvider("wss://demos.yjs.dev", roomId, ydoc, {
+      connect: true,
     });
 
-    provider.on("status", ({ connected }) => {
-      if (!connected) setSync("connecting", "同期接続中…");
+    provider.on("status", ({ status }) => {
+      if (status === "connected") updatePeerStatus();
+      else if (status === "connecting") setSync("connecting", "同期接続中…");
+      else setSync("offline", "切断 · 再接続中…");
     });
-    provider.on("peers", ({ webrtcPeers }) => {
-      const n = (webrtcPeers?.length || 0) + 1;
-      if (provider?.connected) {
-        setSync("online", n > 1 ? `同期中 · ${n}人` : "同期中 · 相手の接続待ち");
-      }
+    provider.on("sync", (isSynced) => {
+      if (isSynced) updatePeerStatus();
     });
+    provider.awareness?.on("change", () => updatePeerStatus());
 
     ymap.observe(() => {
       if (state.suppressSync) return;
@@ -569,7 +578,11 @@ function joinRoom(room) {
 
     setTimeout(() => {
       if (ymap && !ymap.get("state")) pushRemote();
-    }, 800);
+      updatePeerStatus();
+      if (provider && !provider.wsconnected) {
+        setSync("offline", "同期できない（ローカル保存は有効）");
+      }
+    }, 4000);
   } catch (err) {
     console.error(err);
     setSync("offline", "ローカルのみ（同期失敗）");
