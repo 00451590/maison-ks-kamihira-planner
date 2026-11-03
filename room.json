@@ -1,0 +1,10 @@
+{
+  "name": "メゾンKS加美平 1DK",
+  "note": "縮尺は洋室の実測校正済み（旧プランナーから継承）",
+  "scale_default": { "cmPerPxX": 1.456, "cmPerPxY": 1.362 },
+  "image": { "file": "madori.jpg", "px": { "w": 640, "h": 360 } },
+  "approx_cm_from_scale": {
+    "image_w": 932,
+    "image_h": 490
+  }
+}

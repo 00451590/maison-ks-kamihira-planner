@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>メゾンKS加美平 · 二人用プランナー</title>
+  <link rel="stylesheet" href="style.css?v=1" />
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>メゾンKS加美平 1DK</h1>
+      <p class="sub">この1ページを二人で同時編集 · 1DK（福生）· 縮尺は洋室実測ベース</p>
+    </div>
+    <div class="top-right">
+      <span id="syncStatus" class="sync connecting">同期準備中…</span>
+      <button type="button" id="btnCopy">共有リンクをコピー</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <aside class="sidebar">
+      <section>
+        <h2>家具を追加</h2>
+        <p class="hint">名前クリックで配置。幅・奥・高を直接変更、✕で選択肢から削除。</p>
+        <div class="palette" id="palette"></div>
+        <button type="button" id="btnResetCatalog" class="full subtle">初期の選択肢に戻す</button>
+      </section>
+
+      <section>
+        <h2>カスタムを選択肢に追加</h2>
+        <div class="custom-grid">
+          <input id="cName" type="text" placeholder="名前" />
+          <input id="cW" type="number" placeholder="幅cm" min="10" />
+          <input id="cD" type="number" placeholder="奥行cm" min="10" />
+          <input id="cH" type="number" placeholder="高さcm" min="10" value="70" />
+        </div>
+        <button type="button" id="btnCustom" class="full">選択肢に追加</button>
+      </section>
+
+      <section>
+        <h2>選択中（配置済み）</h2>
+        <div id="selection" class="selection empty">家具を選ぶと操作できます</div>
+        <div class="sel-size" id="selSize" hidden>
+          <label>幅<input type="number" id="selW" min="1" /></label>
+          <label>奥<input type="number" id="selD" min="1" /></label>
+          <label>高<input type="number" id="selH" min="1" /></label>
+        </div>
+        <div class="sel-actions" id="selActions" hidden>
+          <button type="button" id="rotL">⟲ 90°</button>
+          <button type="button" id="rotR">90° ⟳</button>
+          <button type="button" id="dup">複製</button>
+          <button type="button" id="del" class="danger">削除</button>
+        </div>
+      </section>
+
+      <section class="compact">
+        <h2>縮尺</h2>
+        <div class="scale-row">
+          <label>横 <input type="number" id="scaleX" step="0.001" value="1.456" /></label>
+          <label>縦 <input type="number" id="scaleY" step="0.001" value="1.362" /></label>
+        </div>
+        <div class="row">
+          <button type="button" id="btnExport">JSON</button>
+          <button type="button" id="btnImport">読込</button>
+          <button type="button" id="btnClear" class="danger">クリア</button>
+        </div>
+        <input type="file" id="importFile" accept="application/json,.json" hidden />
+        <p class="hint" id="saveMsg">自動保存</p>
+      </section>
+    </aside>
+
+    <section class="stages">
+      <div class="stage-wrap plan">
+        <div class="canvas-tools">
+          <span>2D配置 · ドラッグ移動 · ホイールズーム</span>
+          <button type="button" id="fit">全体表示</button>
+        </div>
+        <canvas id="c2d" aria-label="間取り配置"></canvas>
+      </div>
+      <div class="stage-wrap view3d">
+        <div class="canvas-tools">
+          <span>3D · ドラッグ回転</span>
+          <button type="button" id="resetCam">視点リセット</button>
+        </div>
+        <div id="c3d"></div>
+      </div>
+    </section>
+
+    <aside class="lists">
+      <article class="card">
+        <header>
+          <h2>買い物リスト</h2>
+          <button type="button" id="addShop">＋</button>
+        </header>
+        <div class="add-row">
+          <input id="shopText" type="text" placeholder="買うもの" />
+          <input id="shopPrice" type="number" placeholder="円" min="0" />
+        </div>
+        <ul id="shopList" class="checklist"></ul>
+        <p class="sum">未購入合計: <b id="shopSum">¥0</b></p>
+      </article>
+
+      <article class="card">
+        <header>
+          <h2>予定</h2>
+          <button type="button" id="addTodo">＋</button>
+        </header>
+        <div class="add-row">
+          <input id="todoText" type="text" placeholder="やること" />
+          <input id="todoDate" type="date" />
+        </div>
+        <ul id="todoList" class="checklist"></ul>
+      </article>
+
+      <article class="card notes">
+        <header><h2>メモ</h2></header>
+        <textarea id="sharedNotes" rows="6" placeholder="二人のメモ…"></textarea>
+      </article>
+    </aside>
+  </main>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/",
+      "yjs": "https://esm.sh/yjs@13.6.18",
+      "y-webrtc": "https://esm.sh/y-webrtc@10.3.0?deps=yjs@13.6.18",
+      "y-protocols/": "https://esm.sh/y-protocols@1.0.6/"
+    }
+  }
+  </script>
+  <script type="module" src="app.js?v=1"></script>
+</body>
+</html>
