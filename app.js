@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import * as Y from "yjs";
-import { WebsocketProvider } from "y-websocket";
+import mqtt from "mqtt";
 
 const CATALOG = [
   { id: "sofa120", name: "ソファベッド120", w: 120, d: 78, h: 75, color: "#7d8f72", note: "脚付き・2人同居向き" },
@@ -72,10 +71,12 @@ const els = {
 
 const ctx = els.canvas.getContext("2d");
 let three = null;
-let ydoc = null;
-let provider = null;
-let ymap = null;
+let mqttClient = null;
 let saveTimer = null;
+const CLIENT_ID = "c-" + Math.random().toString(36).slice(2, 10);
+const SYNC_TOPIC = "furniture-planner/00451590/maison-ks-kamihira/v1";
+let lastRemoteTs = 0;
+let peerSeenAt = 0;
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
@@ -161,8 +162,13 @@ function schedulePersist() {
 }
 
 function pushRemote() {
-  if (state.suppressSync || !ymap) return;
-  ymap.set("state", snapshot());
+  if (state.suppressSync || !mqttClient || !mqttClient.connected) return;
+  const payload = JSON.stringify({
+    clientId: CLIENT_ID,
+    ts: Date.now(),
+    state: snapshot(),
+  });
+  mqttClient.publish(SYNC_TOPIC, payload, { qos: 0, retain: true });
 }
 
 function loadLocal() {
@@ -525,64 +531,70 @@ function rebuild3d() {
   three.controls.target.set(ws.w / 2, 40, ws.h / 2);
 }
 
-/* ---------- Collab ---------- */
+/* ---------- Collab (MQTT over public broker) ---------- */
 function setSync(status, text) {
   els.syncStatus.className = `sync ${status}`;
   els.syncStatus.textContent = text;
 }
 
-function updatePeerStatus() {
-  if (!provider) return;
-  const n = provider.awareness?.getStates()?.size || 1;
-  if (provider.wsconnected) {
-    setSync("online", n > 1 ? `同期中 · ${n}人` : "同期OK · 相手の接続待ち");
-  }
-}
-
-function joinRoom(room) {
-  const name = (room || DEFAULT_ROOM).trim().toLowerCase().replace(/[^a-z0-9\-]/g, "").slice(0, 32) || DEFAULT_ROOM;
-  const roomId = `maison-ks-kamihira-${name}`;
-
+function joinRoom() {
   try {
-    if (provider) {
-      provider.destroy();
-      provider = null;
-    }
-    if (ydoc) {
-      ydoc.destroy();
-      ydoc = null;
+    if (mqttClient) {
+      try { mqttClient.end(true); } catch (_) {}
+      mqttClient = null;
     }
 
     setSync("connecting", "同期接続中…");
-    ydoc = new Y.Doc();
-    ymap = ydoc.getMap("shared");
-    provider = new WebsocketProvider("wss://demos.yjs.dev", roomId, ydoc, {
-      connect: true,
+    mqttClient = mqtt.connect("wss://broker.hivemq.com:8884/mqtt", {
+      clientId: "planner-" + CLIENT_ID,
+      clean: true,
+      connectTimeout: 10000,
+      reconnectPeriod: 3000,
+      protocolVersion: 4,
     });
 
-    provider.on("status", ({ status }) => {
-      if (status === "connected") updatePeerStatus();
-      else if (status === "connecting") setSync("connecting", "同期接続中…");
-      else setSync("offline", "切断 · 再接続中…");
+    mqttClient.on("connect", () => {
+      setSync("online", "同期OK · 相手の接続待ち");
+      mqttClient.subscribe(SYNC_TOPIC, { qos: 0 });
+      pushRemote();
     });
-    provider.on("sync", (isSynced) => {
-      if (isSynced) updatePeerStatus();
-    });
-    provider.awareness?.on("change", () => updatePeerStatus());
 
-    ymap.observe(() => {
-      if (state.suppressSync) return;
-      const remote = ymap.get("state");
-      if (remote) applySnapshot(remote, { fromRemote: true });
+    mqttClient.on("reconnect", () => setSync("connecting", "再接続中…"));
+    mqttClient.on("close", () => setSync("offline", "切断 · 再接続します"));
+    mqttClient.on("error", (err) => {
+      console.error(err);
+      setSync("offline", "同期エラー（ローカル保存は有効）");
     });
+
+    mqttClient.on("message", (_topic, buf) => {
+      try {
+        const msg = JSON.parse(buf.toString());
+        if (!msg || !msg.state) return;
+        if (msg.clientId === CLIENT_ID) return;
+        if (msg.ts && msg.ts <= lastRemoteTs) return;
+        lastRemoteTs = msg.ts || Date.now();
+        peerSeenAt = Date.now();
+        applySnapshot(msg.state, { fromRemote: true });
+        setSync("online", "同期中 · 相手と接続中");
+      } catch (err) {
+        console.error(err);
+      }
+    });
+
+    setInterval(() => {
+      if (!mqttClient?.connected) return;
+      if (peerSeenAt && Date.now() - peerSeenAt < 15000) {
+        setSync("online", "同期中 · 相手と接続中");
+      } else {
+        setSync("online", "同期OK · 相手の接続待ち");
+      }
+    }, 5000);
 
     setTimeout(() => {
-      if (ymap && !ymap.get("state")) pushRemote();
-      updatePeerStatus();
-      if (provider && !provider.wsconnected) {
+      if (!mqttClient?.connected) {
         setSync("offline", "同期できない（ローカル保存は有効）");
       }
-    }, 4000);
+    }, 8000);
   } catch (err) {
     console.error(err);
     setSync("offline", "ローカルのみ（同期失敗）");
@@ -944,7 +956,7 @@ try {
   setSync("offline", "3D初期化失敗");
 }
 
-joinRoom(DEFAULT_ROOM);
+joinRoom();
 
 const img = new Image();
 img.decoding = "async";
